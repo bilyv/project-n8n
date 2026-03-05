@@ -1,146 +1,186 @@
 {
-  "name": "Business Discovery + Online Presence Audit",
+  "name": "Business Discovery + Online Presence Audit (LocationIQ)",
   "nodes": [
     {
       "parameters": {
-        "formTitle": "Business Audit Search",
-        "formDescription": "Enter a business category and a location to discover businesses and audit their online presence.",
+        "formTitle": "Business Discovery & Audit",
+        "formDescription": "Search any business category in any city. Powered by LocationIQ + AI.",
         "formFields": {
           "values": [
             {
               "fieldLabel": "Business Category",
-              "fieldType": "text",
-              "placeholder": "e.g. hotels, restaurants, clinics, salons",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  { "option": "Hotels" },
+                  { "option": "Guest Houses" },
+                  { "option": "Restaurants" },
+                  { "option": "Cafes" },
+                  { "option": "Bars" },
+                  { "option": "Clinics" },
+                  { "option": "Hospitals" },
+                  { "option": "Pharmacies" },
+                  { "option": "Salons" },
+                  { "option": "Supermarkets" },
+                  { "option": "Banks" },
+                  { "option": "Schools" },
+                  { "option": "Tour Operators" }
+                ]
+              },
               "requiredField": true
             },
             {
-              "fieldLabel": "Location",
+              "fieldLabel": "City",
               "fieldType": "text",
-              "placeholder": "e.g. Kigali, Rwanda",
+              "placeholder": "e.g. Kigali",
               "requiredField": true
+            },
+            {
+              "fieldLabel": "Search Radius (meters)",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  { "option": "2000" },
+                  { "option": "5000" },
+                  { "option": "10000" }
+                ]
+              },
+              "requiredField": false
             }
           ]
         },
         "options": {
           "respondWith": "text",
-          "responseText": "✅ Audit started! Your results will appear in Google Sheets shortly."
+          "responseText": "✅ Audit started! Results will appear in your Google Sheet shortly."
         }
       },
-      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "id": "node-0001",
       "name": "Form Trigger",
       "type": "n8n-nodes-base.formTrigger",
       "typeVersion": 2.2,
       "position": [180, 400],
-      "webhookId": "form-trigger-webhook-001"
+      "webhookId": "form-trigger-locationiq-001"
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "field-001",
-              "name": "category",
-              "value": "={{ $json['Business Category'] }}",
-              "type": "string"
-            },
-            {
-              "id": "field-002",
-              "name": "location",
-              "value": "={{ $json['Location'] }}",
-              "type": "string"
-            },
-            {
-              "id": "field-003",
-              "name": "search_query",
-              "value": "={{ $json['Business Category'] + ' in ' + $json['Location'] }}",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
+        "jsCode": "// Map form category labels to LocationIQ / OSM PoI tags\n// LocationIQ Nearby supports both single-word tags and key=value pairs\nconst categoryInput = $input.first().json['Business Category'];\nconst city          = $input.first().json['City'];\nconst radius        = $input.first().json['Search Radius (meters)'] || '5000';\n\nconst tagMap = {\n  'Hotels':          'hotel',\n  'Guest Houses':    'guest_house',\n  'Restaurants':     'restaurant',\n  'Cafes':           'cafe',\n  'Bars':            'bar',\n  'Clinics':         'clinic',\n  'Hospitals':       'hospital',\n  'Pharmacies':      'pharmacy',\n  'Salons':          'beauty',\n  'Supermarkets':    'supermarket',\n  'Banks':           'bank',\n  'Schools':         'school',\n  'Tour Operators':  'travel_agent'\n};\n\nconst tag = tagMap[categoryInput] || categoryInput.toLowerCase();\n\nreturn [{\n  json: {\n    category:  categoryInput,\n    city:      city,\n    tag:       tag,\n    radius:    radius,\n    token:     'pk.c9672dfbd60d64e1282081cb90e4222d'\n  }\n}];"
       },
-      "id": "a1b2c3d4-0002-0002-0002-000000000002",
-      "name": "Build Search Query",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
+      "id": "node-0002",
+      "name": "Map Category to LocationIQ Tag",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [400, 400]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.search.brave.com/res/v1/web/search",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Accept",
-              "value": "application/json"
-            },
-            {
-              "name": "Accept-Encoding",
-              "value": "gzip"
-            },
-            {
-              "name": "X-Subscription-Token",
-              "value": "={{ $env.BRAVE_API_KEY }}"
-            }
-          ]
-        },
+        "url": "https://us1.locationiq.com/v1/search",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            {
-              "name": "q",
-              "value": "={{ $json.search_query }}"
-            },
-            {
-              "name": "count",
-              "value": "10"
-            },
-            {
-              "name": "search_lang",
-              "value": "en"
-            },
-            {
-              "name": "result_filter",
-              "value": "web"
-            }
+            { "name": "key",    "value": "={{ $json.token }}" },
+            { "name": "q",      "value": "={{ $json.city }}" },
+            { "name": "format", "value": "json" },
+            { "name": "limit",  "value": "1" }
           ]
         },
-        "options": {
-          "response": {
-            "response": {
-              "fullResponse": false
-            }
-          }
-        }
+        "options": {}
       },
-      "id": "a1b2c3d4-0003-0003-0003-000000000003",
-      "name": "Brave Search API",
+      "id": "node-0003",
+      "name": "LocationIQ — Geocode City",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [620, 400]
     },
     {
       "parameters": {
-        "jsCode": "// Parse Brave Search results into individual business items\nconst results = $input.first().json.web?.results || [];\nconst category = $('Build Search Query').first().json.category;\nconst location = $('Build Search Query').first().json.location;\n\nif (results.length === 0) {\n  return [{ json: { error: 'No results found', category, location } }];\n}\n\nreturn results.map(r => ({\n  json: {\n    name: r.title || 'Unknown',\n    website: r.url || null,\n    description: r.description || '',\n    domain: r.url ? (() => { try { return new URL(r.url).hostname; } catch(e) { return null; } })() : null,\n    has_website: !!r.url,\n    category: category,\n    location: location\n  }\n}));"
+        "jsCode": "// Extract lat/lon from geocoding result and pass forward\nconst geo      = $input.first().json;\nconst inputs   = $('Map Category to LocationIQ Tag').first().json;\n\nif (!geo || !geo[0]) {\n  throw new Error('Could not geocode city: ' + inputs.city + '. Check the city name and try again.');\n}\n\nconst lat = geo[0].lat;\nconst lon = geo[0].lon;\nconst displayName = geo[0].display_name;\n\nreturn [{\n  json: {\n    category:     inputs.category,\n    city:         inputs.city,\n    tag:          inputs.tag,\n    radius:       inputs.radius,\n    token:        inputs.token,\n    lat:          lat,\n    lon:          lon,\n    display_name: displayName\n  }\n}];"
       },
-      "id": "a1b2c3d4-0004-0004-0004-000000000004",
-      "name": "Parse Business Results",
+      "id": "node-0004",
+      "name": "Extract Coordinates",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [840, 400]
     },
     {
       "parameters": {
+        "method": "GET",
+        "url": "https://us1.locationiq.com/v1/nearby",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "key",    "value": "={{ $json.token }}" },
+            { "name": "lat",    "value": "={{ $json.lat }}" },
+            { "name": "lon",    "value": "={{ $json.lon }}" },
+            { "name": "tag",    "value": "={{ $json.tag }}" },
+            { "name": "radius", "value": "={{ $json.radius }}" },
+            { "name": "format", "value": "json" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-0005",
+      "name": "LocationIQ — Nearby Businesses",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse LocationIQ Nearby PoI results into clean business records\n// LocationIQ returns: place_id, osm_id, lat, lon, display_name, address{}, namedetails{}\nconst results  = $input.first().json;\nconst inputs   = $('Extract Coordinates').first().json;\n\nif (!results || !Array.isArray(results) || results.length === 0) {\n  return [{\n    json: {\n      error:    'No businesses found by LocationIQ for: ' + inputs.category + ' in ' + inputs.city,\n      category: inputs.category,\n      city:     inputs.city\n    }\n  }];\n}\n\nreturn results.map(place => {\n  const addr = place.address || {};\n\n  // Build readable address from LocationIQ address object\n  const addressParts = [\n    addr.road || addr.pedestrian,\n    addr.suburb || addr.neighbourhood,\n    addr.city || addr.town || addr.village || inputs.city,\n    addr.country\n  ].filter(Boolean);\n\n  // LocationIQ gives us the name directly\n  const name = place.name || place.namedetails?.name || place.display_name?.split(',')[0] || 'Unknown';\n\n  // Build Google Maps search link using name + city\n  const mapsSearch = 'https://www.google.com/maps/search/' + encodeURIComponent(name + ' ' + inputs.city);\n\n  return {\n    json: {\n      place_id:       place.place_id,\n      osm_id:         place.osm_id,\n      osm_type:       place.osm_type,\n      name:           name,\n      category:       inputs.category,\n      city:           inputs.city,\n      address:        addressParts.join(', ') || inputs.city,\n      lat:            place.lat,\n      lon:            place.lon,\n      // LocationIQ may return website/phone if present in OSM data\n      website:        place.address?.website || null,\n      phone:          place.address?.phone   || null,\n      has_website:    !!(place.address?.website),\n      has_phone:      !!(place.address?.phone),\n      // Direct links\n      osm_url:        'https://www.openstreetmap.org/' + (place.osm_type || 'node') + '/' + place.osm_id,\n      maps_search_url: mapsSearch,\n      token:          inputs.token\n    }\n  };\n});"
+      },
+      "id": "node-0006",
+      "name": "Parse Business Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 400]
+    },
+    {
+      "parameters": {
         "batchSize": 3,
         "options": {}
       },
-      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "id": "node-0007",
       "name": "Process in Batches",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [1060, 400]
+      "position": [1500, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://us1.locationiq.com/v1/reverse",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "key",               "value": "={{ $json.token }}" },
+            { "name": "lat",               "value": "={{ $json.lat }}" },
+            { "name": "lon",               "value": "={{ $json.lon }}" },
+            { "name": "format",            "value": "json" },
+            { "name": "addressdetails",    "value": "1" },
+            { "name": "extratags",         "value": "1" },
+            { "name": "namedetails",       "value": "1" },
+            { "name": "normalizeaddress",  "value": "1" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-0008",
+      "name": "LocationIQ — Enrich with Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1720, 400],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge LocationIQ reverse geocode enrichment with the base business record\n// extratags contains: website, phone, email, opening_hours, contact:* etc.\nconst detail  = $input.first().json;\nconst biz     = $('Process in Batches').first().json;\nconst extra   = detail.extratags || {};\nconst addr    = detail.address   || {};\n\n// Extract all possible website and contact fields\nconst website   = extra.website          || extra['contact:website']  || extra.url          || biz.website  || null;\nconst phone     = extra.phone            || extra['contact:phone']    || extra['contact:mobile'] || biz.phone || null;\nconst email     = extra.email            || extra['contact:email']    || null;\nconst facebook  = extra['contact:facebook']  || extra.facebook        || null;\nconst instagram = extra['contact:instagram'] || extra.instagram       || null;\nconst twitter   = extra['contact:twitter']   || extra.twitter         || null;\nconst whatsapp  = extra['contact:whatsapp']  || null;\nconst hours     = extra.opening_hours    || null;\n\n// Refined address from reverse geocode\nconst refinedAddress = [\n  addr.road || addr.pedestrian,\n  addr.suburb || addr.neighbourhood || addr.quarter,\n  addr.city || addr.town || biz.city\n].filter(Boolean).join(', ') || biz.address;\n\nreturn [{\n  json: {\n    // Carry forward all base fields\n    ...biz,\n    // Override with enriched data\n    address:        refinedAddress,\n    website:        website,\n    has_website:    !!website,\n    phone:          phone,\n    has_phone:      !!phone,\n    email:          email,\n    facebook_direct: facebook,\n    instagram_direct: instagram,\n    twitter_direct: twitter,\n    whatsapp_direct: whatsapp,\n    opening_hours:  hours,\n    has_hours:      !!hours,\n    // Store all raw extra tags for AI context\n    extra_tags_raw: JSON.stringify(extra).substring(0, 300)\n  }\n}];"
+      },
+      "id": "node-0009",
+      "name": "Extract All Business Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1940, 400]
     },
     {
       "parameters": {
@@ -162,22 +202,22 @@
           }
         }
       },
-      "id": "a1b2c3d4-0006-0006-0006-000000000006",
+      "id": "node-0010",
       "name": "Check Website Live",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1280, 260],
+      "position": [2160, 260],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Determine if website is live based on HTTP response\nconst item = $input.first();\nconst statusCode = item.json.statusCode || item.json.status || 0;\nconst isLive = statusCode >= 200 && statusCode < 400;\n\nreturn [{\n  json: {\n    website_live: isLive,\n    website_status_code: statusCode,\n    website_checked: true\n  }\n}];"
+        "jsCode": "const item       = $input.first();\nconst statusCode = item.json.statusCode || item.json.status || 0;\nconst isLive     = statusCode >= 200 && statusCode < 400;\n\nreturn [{\n  json: {\n    website_live:        isLive,\n    website_status_code: statusCode,\n    website_checked:     true\n  }\n}];"
       },
-      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "id": "node-0011",
       "name": "Evaluate Website Status",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1500, 260]
+      "position": [2380, 260]
     },
     {
       "parameters": {
@@ -186,36 +226,30 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
+            { "name": "Authorization", "value": "=Bearer {{ $env.GROQ_API_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a business intelligence analyst. Your job is to research and assess the online presence of businesses. Always return ONLY a valid JSON object with no markdown formatting, no code blocks, no extra text whatsoever. Just raw JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Research the online presence of this business:\\nName: {{ $json.name }}\\nCategory: {{ $json.category }}\\nLocation: {{ $json.location }}\\nWebsite found: {{ $json.website || 'none' }}\\n\\nReturn exactly this JSON structure (fill in what you can research or infer, use null if truly unknown):\\n{\\n  \\\"facebook_url\\\": null,\\n  \\\"instagram_url\\\": null,\\n  \\\"twitter_url\\\": null,\\n  \\\"tripadvisor_listed\\\": false,\\n  \\\"booking_com_listed\\\": false,\\n  \\\"google_business_likely\\\": false,\\n  \\\"whatsapp_number\\\": null,\\n  \\\"online_score\\\": 0,\\n  \\\"missing_channels\\\": [],\\n  \\\"weakness\\\": \\\"Describe the biggest gap in their online presence in one sentence.\\\",\\n  \\\"opportunity\\\": \\\"Describe the biggest opportunity to improve their online presence in one sentence.\\\"\\n}\"\n    }\n  ],\n  \"max_tokens\": 500,\n  \"temperature\": 0.1\n}",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a digital presence analyst for businesses in Africa. Research the online footprint of businesses. Return ONLY a raw valid JSON object — no markdown, no code blocks, no preamble.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze the full online presence of this business. Some info was already found from LocationIQ/OpenStreetMap — do NOT re-report what we already have, only find what is MISSING:\\n\\nName: {{ $json.name }}\\nCategory: {{ $json.category }}\\nCity: {{ $json.city }}\\nAddress: {{ $json.address }}\\nWebsite (from map data): {{ $json.website || 'Not found' }}\\nPhone (from map data): {{ $json.phone || 'Not found' }}\\nFacebook (from map data): {{ $json.facebook_direct || 'Not found' }}\\nInstagram (from map data): {{ $json.instagram_direct || 'Not found' }}\\nOpening hours (from map data): {{ $json.opening_hours || 'Not found' }}\\n\\nResearch what else exists online and return this JSON:\\n{\\n  \\\"facebook_url\\\": null,\\n  \\\"instagram_url\\\": null,\\n  \\\"twitter_url\\\": null,\\n  \\\"linkedin_url\\\": null,\\n  \\\"tripadvisor_listed\\\": false,\\n  \\\"booking_com_listed\\\": false,\\n  \\\"airbnb_listed\\\": false,\\n  \\\"whatsapp_business\\\": false,\\n  \\\"has_google_business\\\": false,\\n  \\\"online_score\\\": 0,\\n  \\\"missing_channels\\\": [],\\n  \\\"weakness\\\": \\\"One sentence: biggest digital gap.\\\",\\n  \\\"opportunity\\\": \\\"One sentence: best growth move online.\\\",\\n  \\\"priority\\\": \\\"high|medium|low\\\"\\n}\"\n    }\n  ],\n  \"max_tokens\": 500,\n  \"temperature\": 0.1\n}",
         "options": {}
       },
-      "id": "a1b2c3d4-0008-0008-0008-000000000008",
-      "name": "Groq AI Audit",
+      "id": "node-0012",
+      "name": "Groq AI — Deep Social Audit",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1280, 540]
+      "position": [2160, 540]
     },
     {
       "parameters": {
-        "jsCode": "// Parse Groq AI response safely\nconst groqResponse = $input.first().json;\nlet aiData = {};\n\ntry {\n  const rawContent = groqResponse.choices?.[0]?.message?.content || '{}';\n  const cleaned = rawContent.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  aiData = JSON.parse(cleaned);\n} catch (e) {\n  aiData = {\n    facebook_url: null,\n    instagram_url: null,\n    twitter_url: null,\n    tripadvisor_listed: false,\n    booking_com_listed: false,\n    google_business_likely: false,\n    whatsapp_number: null,\n    online_score: 0,\n    missing_channels: [],\n    weakness: 'Could not analyze — manual review needed',\n    opportunity: 'Manual review needed'\n  };\n}\n\nreturn [{ json: aiData }];"
+        "jsCode": "const resp = $input.first().json;\nlet ai = {};\ntry {\n  const raw     = resp.choices?.[0]?.message?.content || '{}';\n  const cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  ai = JSON.parse(cleaned);\n} catch (e) {\n  ai = {\n    facebook_url: null, instagram_url: null, twitter_url: null, linkedin_url: null,\n    tripadvisor_listed: false, booking_com_listed: false, airbnb_listed: false,\n    whatsapp_business: false, has_google_business: false,\n    online_score: 0, missing_channels: [],\n    weakness: 'AI analysis failed — manual review needed',\n    opportunity: 'Manual review needed',\n    priority: 'medium'\n  };\n}\nreturn [{ json: ai }];"
       },
-      "id": "a1b2c3d4-0009-0009-0009-000000000009",
+      "id": "node-0013",
       "name": "Parse AI Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1500, 540]
+      "position": [2380, 540]
     },
     {
       "parameters": {
@@ -223,21 +257,21 @@
         "combinationMode": "mergeByPosition",
         "options": {}
       },
-      "id": "a1b2c3d4-0010-0010-0010-000000000010",
-      "name": "Merge Website + AI Data",
+      "id": "node-0014",
+      "name": "Merge All Data",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [1720, 400]
+      "position": [2600, 400]
     },
     {
       "parameters": {
-        "jsCode": "// Merge all data and compute final Online Presence Score\nconst items = $input.all();\nconst batchItem = $('Process in Batches').first().json;\n\n// Get website check result\nlet websiteLive = false;\nlet statusCode = 0;\ntry {\n  const wsItem = items.find(i => i.json.website_checked);\n  websiteLive = wsItem?.json?.website_live || false;\n  statusCode = wsItem?.json?.website_status_code || 0;\n} catch(e) {}\n\n// Get AI audit result\nlet aiData = {};\ntry {\n  const aiItem = items.find(i => i.json.hasOwnProperty('online_score'));\n  aiData = aiItem?.json || {};\n} catch(e) {}\n\n// Compute weighted score (0-100)\nlet score = 0;\nif (batchItem.has_website && websiteLive) score += 25;\nif (aiData.facebook_url)            score += 10;\nif (aiData.instagram_url)           score += 10;\nif (aiData.tripadvisor_listed)      score += 15;\nif (aiData.booking_com_listed)      score += 20;\nif (aiData.google_business_likely)  score += 20;\n\nscore = Math.min(100, score);\n\n// Assign tier\nlet tier, tier_emoji;\nif (score >= 70)      { tier = 'Strong';   tier_emoji = '🟢'; }\nelse if (score >= 40) { tier = 'Moderate'; tier_emoji = '🟡'; }\nelse                  { tier = 'Weak';     tier_emoji = '🔴'; }\n\nreturn [{\n  json: {\n    business_name:        batchItem.name || 'Unknown',\n    category:             batchItem.category || '',\n    location:             batchItem.location || '',\n    website:              batchItem.website || 'None',\n    description:          batchItem.description || '',\n    has_website:          batchItem.has_website,\n    website_live:         websiteLive,\n    website_status_code:  statusCode,\n    facebook_url:         aiData.facebook_url || 'Not found',\n    instagram_url:        aiData.instagram_url || 'Not found',\n    twitter_url:          aiData.twitter_url || 'Not found',\n    whatsapp_number:      aiData.whatsapp_number || 'Not found',\n    tripadvisor_listed:   aiData.tripadvisor_listed || false,\n    booking_com_listed:   aiData.booking_com_listed || false,\n    google_business:      aiData.google_business_likely || false,\n    online_score:         score,\n    tier:                 tier,\n    tier_emoji:           tier_emoji,\n    full_tier:            tier_emoji + ' ' + tier,\n    missing_channels:     (aiData.missing_channels || []).join(', ') || 'None identified',\n    weakness:             aiData.weakness || 'Unknown',\n    opportunity:          aiData.opportunity || 'Unknown',\n    audited_at:           new Date().toISOString(),\n    audited_date:         new Date().toLocaleDateString('en-GB')\n  }\n}];"
+        "jsCode": "const items = $input.all();\nconst biz   = $('Extract All Business Details').first().json;\n\n// Website live check\nlet websiteLive = false, statusCode = 0;\ntry {\n  const ws = items.find(i => i.json.website_checked);\n  websiteLive = ws?.json?.website_live || false;\n  statusCode  = ws?.json?.website_status_code || 0;\n} catch(e) {}\n\n// AI result\nlet ai = {};\ntry {\n  const aiItem = items.find(i => i.json.hasOwnProperty('online_score'));\n  ai = aiItem?.json || {};\n} catch(e) {}\n\n// ---- SCORING (0–100) ----\nlet score = 0;\n\n// LocationIQ / Map data signals — what we KNOW for certain\nif (biz.has_website)                              score += 15; // Has website in map data\nif (biz.has_website && websiteLive)               score += 10; // Website is actually live\nif (biz.has_phone)                                score += 5;  // Has phone number\nif (biz.has_hours)                                score += 5;  // Has opening hours\nif (biz.facebook_direct || ai.facebook_url)       score += 7;  // Facebook\nif (biz.instagram_direct || ai.instagram_url)     score += 7;  // Instagram\n\n// AI-discovered platforms\nif (ai.twitter_url)                               score += 3;  // Twitter/X\nif (ai.linkedin_url)                              score += 3;  // LinkedIn\nif (ai.whatsapp_business || biz.whatsapp_direct)  score += 5;  // WhatsApp Business\nif (ai.has_google_business)                       score += 15; // Google Business Profile\nif (ai.tripadvisor_listed)                        score += 10; // TripAdvisor\nif (ai.booking_com_listed)                        score += 10; // Booking.com\nif (ai.airbnb_listed)                             score += 5;  // Airbnb\n\nscore = Math.min(100, score);\n\nlet tier, tier_emoji;\nif      (score >= 70) { tier = 'Strong';   tier_emoji = '🟢'; }\nelse if (score >= 40) { tier = 'Moderate'; tier_emoji = '🟡'; }\nelse                  { tier = 'Weak';     tier_emoji = '🔴'; }\n\n// Prefer map-sourced data over AI guesses where both exist\nconst facebook  = biz.facebook_direct  || ai.facebook_url  || 'Not found';\nconst instagram = biz.instagram_direct || ai.instagram_url || 'Not found';\nconst twitter   = biz.twitter_direct   || ai.twitter_url   || 'Not found';\nconst whatsapp  = biz.whatsapp_direct  || (ai.whatsapp_business ? 'Active' : 'Not found');\n\nreturn [{\n  json: {\n    business_name:      biz.name,\n    category:           biz.category,\n    city:               biz.city,\n    address:            biz.address,\n    phone:              biz.phone        || 'Not listed',\n    email:              biz.email        || 'Not listed',\n    website:            biz.website      || 'Not listed',\n    has_website:        biz.has_website,\n    website_live:       websiteLive,\n    opening_hours:      biz.opening_hours|| 'Not listed',\n    facebook:           facebook,\n    instagram:          instagram,\n    twitter:            twitter,\n    linkedin:           ai.linkedin_url  || 'Not found',\n    whatsapp:           whatsapp,\n    tripadvisor:        ai.tripadvisor_listed  || false,\n    booking_com:        ai.booking_com_listed  || false,\n    airbnb:             ai.airbnb_listed       || false,\n    google_business:    ai.has_google_business || false,\n    online_score:       score,\n    full_tier:          tier_emoji + ' ' + tier,\n    tier:               tier,\n    priority:           ai.priority            || 'medium',\n    missing_channels:   (ai.missing_channels || []).join(', ') || 'None identified',\n    weakness:           ai.weakness            || 'Unknown',\n    opportunity:        ai.opportunity         || 'Unknown',\n    maps_search_url:    biz.maps_search_url,\n    osm_url:            biz.osm_url,\n    outreach_message:   '',\n    audited_date:       new Date().toLocaleDateString('en-GB'),\n    audited_at:         new Date().toISOString()\n  }\n}];"
       },
-      "id": "a1b2c3d4-0011-0011-0011-000000000011",
+      "id": "node-0015",
       "name": "Compute Final Score",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1940, 400]
+      "position": [2820, 400]
     },
     {
       "parameters": {
@@ -257,32 +291,41 @@
           "value": {
             "Business Name":     "={{ $json.business_name }}",
             "Category":          "={{ $json.category }}",
-            "Location":          "={{ $json.location }}",
+            "City":              "={{ $json.city }}",
+            "Address":           "={{ $json.address }}",
+            "Phone":             "={{ $json.phone }}",
+            "Email":             "={{ $json.email }}",
             "Website":           "={{ $json.website }}",
             "Website Live":      "={{ $json.website_live }}",
-            "Facebook":          "={{ $json.facebook_url }}",
-            "Instagram":         "={{ $json.instagram_url }}",
-            "Twitter":           "={{ $json.twitter_url }}",
-            "WhatsApp":          "={{ $json.whatsapp_number }}",
-            "TripAdvisor":       "={{ $json.tripadvisor_listed }}",
-            "Booking.com":       "={{ $json.booking_com_listed }}",
+            "Opening Hours":     "={{ $json.opening_hours }}",
+            "Facebook":          "={{ $json.facebook }}",
+            "Instagram":         "={{ $json.instagram }}",
+            "Twitter":           "={{ $json.twitter }}",
+            "LinkedIn":          "={{ $json.linkedin }}",
+            "WhatsApp":          "={{ $json.whatsapp }}",
+            "TripAdvisor":       "={{ $json.tripadvisor }}",
+            "Booking.com":       "={{ $json.booking_com }}",
+            "Airbnb":            "={{ $json.airbnb }}",
             "Google Business":   "={{ $json.google_business }}",
             "Online Score":      "={{ $json.online_score }}",
             "Tier":              "={{ $json.full_tier }}",
+            "Priority":          "={{ $json.priority }}",
             "Missing Channels":  "={{ $json.missing_channels }}",
             "Weakness":          "={{ $json.weakness }}",
             "Opportunity":       "={{ $json.opportunity }}",
+            "Maps Search URL":   "={{ $json.maps_search_url }}",
+            "OSM URL":           "={{ $json.osm_url }}",
             "Outreach Message":  "",
             "Audited Date":      "={{ $json.audited_date }}"
           }
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0012-0012-0012-000000000012",
+      "id": "node-0016",
       "name": "Save to Google Sheets",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [2160, 400],
+      "position": [3040, 400],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "gsheets-cred",
@@ -293,31 +336,24 @@
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
           "conditions": [
             {
               "id": "cond-001",
               "leftValue": "={{ $json.tier }}",
               "rightValue": "Weak",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
+              "operator": { "type": "string", "operation": "equals" }
             }
           ],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0013-0013-0013-000000000013",
+      "id": "node-0017",
       "name": "Is Weak Tier?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2380, 400]
+      "position": [3260, 400]
     },
     {
       "parameters": {
@@ -326,36 +362,30 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
+            { "name": "Authorization", "value": "=Bearer {{ $env.GROQ_API_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert business development consultant. Write short, friendly, professional outreach messages for a digital agency. Return only the message body text — no subject line, no Dear/Hi greeting, no sign-off.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Write a 5-7 sentence outreach message for a digital agency contacting this business:\\nBusiness: {{ $json.business_name }}\\nCategory: {{ $json.category }}\\nLocation: {{ $json.location }}\\nWeakness: {{ $json.weakness }}\\nOpportunity: {{ $json.opportunity }}\\n\\nTone: friendly, helpful, data-driven. Mention 1-2 specific digital gaps found. End with a soft call-to-action offering a free consultation.\"\n    }\n  ],\n  \"max_tokens\": 300,\n  \"temperature\": 0.7\n}",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a digital marketing consultant in Africa. Write concise, persuasive cold outreach messages for a digital agency. Return only the message body — no subject line, no greeting, no sign-off.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Write a 5-6 sentence outreach message for a digital agency contacting:\\n\\nBusiness: {{ $json.business_name }}\\nCategory: {{ $json.category }}\\nCity: {{ $json.city }}\\nWeakness: {{ $json.weakness }}\\nOpportunity: {{ $json.opportunity }}\\nMissing platforms: {{ $json.missing_channels }}\\n\\nBe specific about what gaps were found. End with a soft free consultation offer.\"\n    }\n  ],\n  \"max_tokens\": 300,\n  \"temperature\": 0.7\n}",
         "options": {}
       },
-      "id": "a1b2c3d4-0014-0014-0014-000000000014",
+      "id": "node-0018",
       "name": "Generate Outreach Message",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2600, 280]
+      "position": [3480, 280]
     },
     {
       "parameters": {
-        "jsCode": "// Extract outreach message and attach to business record\nconst groqResp = $input.first().json;\nconst message = groqResp.choices?.[0]?.message?.content || 'Could not generate message';\nconst business = $('Compute Final Score').first().json;\n\nreturn [{\n  json: {\n    ...business,\n    outreach_message: message.trim()\n  }\n}];"
+        "jsCode": "const groqResp = $input.first().json;\nconst message  = groqResp.choices?.[0]?.message?.content || 'Could not generate message';\nconst business = $('Compute Final Score').first().json;\nreturn [{ json: { ...business, outreach_message: message.trim() } }];"
       },
-      "id": "a1b2c3d4-0015-0015-0015-000000000015",
+      "id": "node-0019",
       "name": "Attach Outreach to Record",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2820, 280]
+      "position": [3700, 280]
     },
     {
       "parameters": {
@@ -380,17 +410,17 @@
           "values": [
             {
               "lookupColumn": "Business Name",
-              "lookupValue": "={{ $json.business_name }}"
+              "lookupValue":  "={{ $json.business_name }}"
             }
           ]
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0016-0016-0016-000000000016",
+      "id": "node-0020",
       "name": "Save Outreach to Sheet",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [3040, 280],
+      "position": [3920, 280],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "gsheets-cred",
@@ -403,118 +433,98 @@
         "unit": "seconds",
         "value": 2
       },
-      "id": "a1b2c3d4-0017-0017-0017-000000000017",
+      "id": "node-0021",
       "name": "Rate Limit Pause",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [2600, 520],
-      "webhookId": "wait-webhook-001"
+      "position": [3480, 520],
+      "webhookId": "wait-webhook-locationiq-001"
     }
   ],
   "connections": {
     "Form Trigger": {
-      "main": [
-        [{ "node": "Build Search Query", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Map Category to LocationIQ Tag", "type": "main", "index": 0 }]]
     },
-    "Build Search Query": {
-      "main": [
-        [{ "node": "Brave Search API", "type": "main", "index": 0 }]
-      ]
+    "Map Category to LocationIQ Tag": {
+      "main": [[{ "node": "LocationIQ — Geocode City", "type": "main", "index": 0 }]]
     },
-    "Brave Search API": {
-      "main": [
-        [{ "node": "Parse Business Results", "type": "main", "index": 0 }]
-      ]
+    "LocationIQ — Geocode City": {
+      "main": [[{ "node": "Extract Coordinates", "type": "main", "index": 0 }]]
+    },
+    "Extract Coordinates": {
+      "main": [[{ "node": "LocationIQ — Nearby Businesses", "type": "main", "index": 0 }]]
+    },
+    "LocationIQ — Nearby Businesses": {
+      "main": [[{ "node": "Parse Business Results", "type": "main", "index": 0 }]]
     },
     "Parse Business Results": {
-      "main": [
-        [{ "node": "Process in Batches", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Process in Batches", "type": "main", "index": 0 }]]
     },
     "Process in Batches": {
+      "main": [[{ "node": "LocationIQ — Enrich with Details", "type": "main", "index": 0 }]]
+    },
+    "LocationIQ — Enrich with Details": {
+      "main": [[{ "node": "Extract All Business Details", "type": "main", "index": 0 }]]
+    },
+    "Extract All Business Details": {
       "main": [
         [
-          { "node": "Check Website Live", "type": "main", "index": 0 },
-          { "node": "Groq AI Audit", "type": "main", "index": 0 }
+          { "node": "Check Website Live",         "type": "main", "index": 0 },
+          { "node": "Groq AI — Deep Social Audit", "type": "main", "index": 0 }
         ]
       ]
     },
     "Check Website Live": {
-      "main": [
-        [{ "node": "Evaluate Website Status", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Evaluate Website Status", "type": "main", "index": 0 }]]
     },
     "Evaluate Website Status": {
-      "main": [
-        [{ "node": "Merge Website + AI Data", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Merge All Data", "type": "main", "index": 0 }]]
     },
-    "Groq AI Audit": {
-      "main": [
-        [{ "node": "Parse AI Response", "type": "main", "index": 0 }]
-      ]
+    "Groq AI — Deep Social Audit": {
+      "main": [[{ "node": "Parse AI Response", "type": "main", "index": 0 }]]
     },
     "Parse AI Response": {
-      "main": [
-        [{ "node": "Merge Website + AI Data", "type": "main", "index": 1 }]
-      ]
+      "main": [[{ "node": "Merge All Data", "type": "main", "index": 1 }]]
     },
-    "Merge Website + AI Data": {
-      "main": [
-        [{ "node": "Compute Final Score", "type": "main", "index": 0 }]
-      ]
+    "Merge All Data": {
+      "main": [[{ "node": "Compute Final Score", "type": "main", "index": 0 }]]
     },
     "Compute Final Score": {
-      "main": [
-        [{ "node": "Save to Google Sheets", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Save to Google Sheets", "type": "main", "index": 0 }]]
     },
     "Save to Google Sheets": {
-      "main": [
-        [{ "node": "Is Weak Tier?", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Is Weak Tier?", "type": "main", "index": 0 }]]
     },
     "Is Weak Tier?": {
       "main": [
         [{ "node": "Generate Outreach Message", "type": "main", "index": 0 }],
-        [{ "node": "Rate Limit Pause", "type": "main", "index": 0 }]
+        [{ "node": "Rate Limit Pause",           "type": "main", "index": 0 }]
       ]
     },
     "Generate Outreach Message": {
-      "main": [
-        [{ "node": "Attach Outreach to Record", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Attach Outreach to Record", "type": "main", "index": 0 }]]
     },
     "Attach Outreach to Record": {
-      "main": [
-        [{ "node": "Save Outreach to Sheet", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Save Outreach to Sheet", "type": "main", "index": 0 }]]
     },
     "Save Outreach to Sheet": {
-      "main": [
-        [{ "node": "Rate Limit Pause", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Rate Limit Pause", "type": "main", "index": 0 }]]
     },
     "Rate Limit Pause": {
-      "main": [
-        [{ "node": "Process in Batches", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Process in Batches", "type": "main", "index": 0 }]]
     }
   },
   "pinData": {},
   "settings": {
     "executionOrder": "v1",
     "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner",
-    "errorWorkflow": ""
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": null,
   "tags": [
-    { "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z", "id": "tag-001", "name": "business-discovery" },
-    { "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z", "id": "tag-002", "name": "free-stack" }
+    { "id": "tag-001", "name": "business-discovery" },
+    { "id": "tag-002", "name": "locationiq" },
+    { "id": "tag-003", "name": "free-stack" }
   ],
-  "triggerCount": 0,
-  "updatedAt": "2025-01-01T00:00:00.000Z",
-  "versionId": "v1.1.0"
+  "versionId": "v4.0.0"
 }
