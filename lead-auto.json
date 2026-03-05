@@ -1,0 +1,572 @@
+{
+  "name": "Kigali Business Discovery + Online Presence Audit (Free Stack)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [180, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-001",
+              "name": "categories",
+              "value": "=[\"hotels\", \"restaurants\", \"tour operators\", \"clinics\", \"salons\"]",
+              "type": "array"
+            },
+            {
+              "id": "field-002",
+              "name": "location",
+              "value": "Kigali, Rwanda",
+              "type": "string"
+            },
+            {
+              "id": "field-003",
+              "name": "results_per_category",
+              "value": 10,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Set Search Inputs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [380, 400]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "categories",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "Split Categories",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [580, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-004",
+              "name": "category",
+              "value": "={{ $json.categories }}",
+              "type": "string"
+            },
+            {
+              "id": "field-005",
+              "name": "location",
+              "value": "={{ $json.location }}",
+              "type": "string"
+            },
+            {
+              "id": "field-006",
+              "name": "search_query",
+              "value": "={{ $json.categories + ' in ' + $json.location }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "Build Search Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [780, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.search.brave.com/res/v1/web/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip"
+            },
+            {
+              "name": "X-Subscription-Token",
+              "value": "={{ $credentials.httpHeaderAuth.value }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.search_query }}"
+            },
+            {
+              "name": "count",
+              "value": "10"
+            },
+            {
+              "name": "search_lang",
+              "value": "en"
+            },
+            {
+              "name": "country",
+              "value": "rw"
+            },
+            {
+              "name": "result_filter",
+              "value": "web"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Brave Search API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [980, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "brave-api-cred",
+          "name": "Brave Search API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Brave Search results into individual business items\nconst results = $input.first().json.web?.results || [];\nconst category = $('Build Search Query').first().json.category;\nconst location = $('Build Search Query').first().json.location;\n\nif (results.length === 0) {\n  return [{ json: { error: 'No results found', category, location } }];\n}\n\nreturn results.map(r => ({\n  json: {\n    name: r.title || 'Unknown',\n    website: r.url || null,\n    description: r.description || '',\n    domain: r.url ? (() => { try { return new URL(r.url).hostname; } catch(e) { return null; } })() : null,\n    has_website: !!r.url,\n    category: category,\n    location: location,\n    source_age: r.age || null\n  }\n}));"
+      },
+      "id": "a1b2c3d4-0006-0006-0006-000000000006",
+      "name": "Parse Business Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 400]
+    },
+    {
+      "parameters": {
+        "batchSize": 3,
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "name": "Process in Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1380, 400]
+    },
+    {
+      "parameters": {
+        "method": "HEAD",
+        "url": "={{ $json.website }}",
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "text"
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 3
+            }
+          }
+        }
+      },
+      "id": "a1b2c3d4-0008-0008-0008-000000000008",
+      "name": "Check Website Live",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 280],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine if website is live based on HTTP response\nconst item = $input.first();\nconst statusCode = item.json.statusCode || item.json.status || 0;\nconst isLive = statusCode >= 200 && statusCode < 400;\n\nreturn [{\n  json: {\n    website_live: isLive,\n    website_status_code: statusCode,\n    website_checked: true\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0009-0009-0009-000000000009",
+      "name": "Evaluate Website Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a business intelligence analyst. Your job is to research and assess the online presence of businesses in Kigali, Rwanda. Always return ONLY a valid JSON object with no markdown formatting, no code blocks, no extra text. Just raw JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Research the online presence of this business:\\nName: {{ $json.name }}\\nCategory: {{ $json.category }}\\nLocation: {{ $json.location }}\\nWebsite found: {{ $json.website || 'none' }}\\n\\nReturn exactly this JSON structure (fill in what you know or can infer, use null if unknown):\\n{\\n  \\\"facebook_url\\\": null,\\n  \\\"instagram_url\\\": null,\\n  \\\"twitter_url\\\": null,\\n  \\\"tripadvisor_listed\\\": false,\\n  \\\"booking_com_listed\\\": false,\\n  \\\"google_business_likely\\\": false,\\n  \\\"whatsapp_number\\\": null,\\n  \\\"online_score\\\": 0,\\n  \\\"missing_channels\\\": [],\\n  \\\"weakness\\\": \\\"Describe the biggest gap in their online presence in one sentence.\\\",\\n  \\\"opportunity\\\": \\\"Describe the biggest opportunity to help them in one sentence.\\\"\\n}\"\n    }\n  ],\n  \"max_tokens\": 500,\n  \"temperature\": 0.1\n}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0010-0010-0010-000000000010",
+      "name": "Groq AI Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Groq AI response safely\nconst groqResponse = $input.first().json;\nlet aiData = {};\n\ntry {\n  const rawContent = groqResponse.choices?.[0]?.message?.content || '{}';\n  // Strip markdown code blocks if present\n  const cleaned = rawContent.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  aiData = JSON.parse(cleaned);\n} catch (e) {\n  // Fallback if parsing fails\n  aiData = {\n    facebook_url: null,\n    instagram_url: null,\n    twitter_url: null,\n    tripadvisor_listed: false,\n    booking_com_listed: false,\n    google_business_likely: false,\n    whatsapp_number: null,\n    online_score: 0,\n    missing_channels: [],\n    weakness: 'Could not analyze',\n    opportunity: 'Manual review needed'\n  };\n}\n\nreturn [{ json: aiData }];"
+      },
+      "id": "a1b2c3d4-0011-0011-0011-000000000011",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 520]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0012-0012-0012-000000000012",
+      "name": "Merge Website + AI Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1980, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge all data and compute final Online Presence Score\nconst items = $input.all();\n\n// Get the original business data from the batch\nconst batchItem = $('Process in Batches').first().json;\n\n// Get website check result\nlet websiteLive = false;\nlet statusCode = 0;\ntry {\n  const wsItem = items.find(i => i.json.website_checked);\n  websiteLive = wsItem?.json?.website_live || false;\n  statusCode = wsItem?.json?.website_status_code || 0;\n} catch(e) {}\n\n// Get AI audit result\nlet aiData = {};\ntry {\n  const aiItem = items.find(i => i.json.hasOwnProperty('online_score'));\n  aiData = aiItem?.json || {};\n} catch(e) {}\n\n// Compute weighted score (0-100)\nlet score = 0;\nif (batchItem.has_website && websiteLive) score += 25; // Live website\nif (aiData.facebook_url)            score += 10; // Facebook\nif (aiData.instagram_url)           score += 10; // Instagram  \nif (aiData.tripadvisor_listed)      score += 15; // TripAdvisor\nif (aiData.booking_com_listed)      score += 20; // Booking.com\nif (aiData.google_business_likely)  score += 20; // Google Business\n\n// Also factor in AI's own score as a tie-breaker\nconst aiBonus = Math.round((aiData.online_score || 0) * 0);\nscore = Math.min(100, score + aiBonus);\n\n// Assign tier\nlet tier, tier_emoji;\nif (score >= 70)      { tier = 'Strong';   tier_emoji = '🟢'; }\nelse if (score >= 40) { tier = 'Moderate'; tier_emoji = '🟡'; }\nelse                  { tier = 'Weak';     tier_emoji = '🔴'; }\n\nconst missing = aiData.missing_channels || [];\n\nreturn [{\n  json: {\n    // Business Info\n    business_name:        batchItem.name || 'Unknown',\n    category:             batchItem.category || '',\n    location:             batchItem.location || '',\n    website:              batchItem.website || 'None',\n    description:          batchItem.description || '',\n    \n    // Website Status\n    has_website:          batchItem.has_website,\n    website_live:         websiteLive,\n    website_status_code:  statusCode,\n    \n    // Social Media\n    facebook_url:         aiData.facebook_url || 'Not found',\n    instagram_url:        aiData.instagram_url || 'Not found',\n    twitter_url:          aiData.twitter_url || 'Not found',\n    whatsapp_number:      aiData.whatsapp_number || 'Not found',\n    \n    // Platforms\n    tripadvisor_listed:   aiData.tripadvisor_listed || false,\n    booking_com_listed:   aiData.booking_com_listed || false,\n    google_business:      aiData.google_business_likely || false,\n    \n    // Score & Tier\n    online_score:         score,\n    tier:                 tier,\n    tier_emoji:           tier_emoji,\n    full_tier:            tier_emoji + ' ' + tier,\n    \n    // Insights\n    missing_channels:     missing.join(', ') || 'None identified',\n    weakness:             aiData.weakness || 'Unknown',\n    opportunity:          aiData.opportunity || 'Unknown',\n    \n    // Meta\n    audited_at:           new Date().toISOString(),\n    audited_date:         new Date().toLocaleDateString('en-GB')\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0013-0013-0013-000000000013",
+      "name": "Compute Final Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2180, 400]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID_HERE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Business Audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Business Name":       "={{ $json.business_name }}",
+            "Category":           "={{ $json.category }}",
+            "Location":           "={{ $json.location }}",
+            "Website":            "={{ $json.website }}",
+            "Website Live":       "={{ $json.website_live }}",
+            "Facebook":           "={{ $json.facebook_url }}",
+            "Instagram":          "={{ $json.instagram_url }}",
+            "WhatsApp":           "={{ $json.whatsapp_number }}",
+            "TripAdvisor":        "={{ $json.tripadvisor_listed }}",
+            "Booking.com":        "={{ $json.booking_com_listed }}",
+            "Google Business":    "={{ $json.google_business }}",
+            "Online Score":       "={{ $json.online_score }}",
+            "Tier":               "={{ $json.full_tier }}",
+            "Missing Channels":   "={{ $json.missing_channels }}",
+            "Weakness":           "={{ $json.weakness }}",
+            "Opportunity":        "={{ $json.opportunity }}",
+            "Audited Date":       "={{ $json.audited_date }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0014-0014-0014-000000000014",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2380, 400],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "gsheets-cred",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-001",
+              "leftValue": "={{ $json.tier }}",
+              "rightValue": "Weak",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0015-0015-0015-000000000015",
+      "name": "Is Weak Tier?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2580, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert business development consultant in Rwanda. Write short, friendly, professional outreach messages. Return only the message text, no subject line, no greeting header.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Write a short outreach message (5-7 sentences) for a web agency reaching out to this business:\\nBusiness: {{ $json.business_name }}\\nCategory: {{ $json.category }}\\nLocation: {{ $json.location }}\\nWeakness: {{ $json.weakness }}\\nOpportunity: {{ $json.opportunity }}\\n\\nTone: friendly, helpful, data-driven. Mention 1-2 specific gaps we found. End with a soft call to action for a free consultation.\"\n    }\n  ],\n  \"max_tokens\": 300,\n  \"temperature\": 0.7\n}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0016-0016-0016-000000000016",
+      "name": "Generate Outreach Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2780, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract outreach message from Groq response\nconst groqResp = $input.first().json;\nconst message = groqResp.choices?.[0]?.message?.content || 'Could not generate message';\nconst business = $('Compute Final Score').first().json;\n\nreturn [{\n  json: {\n    ...business,\n    outreach_message: message.trim()\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0017-0017-0017-000000000017",
+      "name": "Extract Outreach Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2980, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🔴 *NEW LEAD FOUND!*\n\n🏢 *{{ $json.business_name }}*\n📁 Category: {{ $json.category }}\n📍 Location: {{ $json.location }}\n🌐 Website: {{ $json.website }}\n📊 Score: {{ $json.online_score }}/100 — {{ $json.full_tier }}\n\n⚠️ *Gap:* {{ $json.weakness }}\n💡 *Opportunity:* {{ $json.opportunity }}\n\n📝 *Outreach Draft:*\n{{ $json.outreach_message }}\n\n_Audited: {{ $json.audited_date }}_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "a1b2c3d4-0018-0018-0018-000000000018",
+      "name": "Telegram — Weak Lead Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [3180, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "unit": "seconds",
+        "value": 2
+      },
+      "id": "a1b2c3d4-0019-0019-0019-000000000019",
+      "name": "Rate Limit Pause",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2780, 520],
+      "webhookId": "wait-webhook-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// After all batches, compile a summary\nconst allItems = $input.all();\n\nlet strong = 0, moderate = 0, weak = 0;\nallItems.forEach(item => {\n  const tier = item.json.tier;\n  if (tier === 'Strong') strong++;\n  else if (tier === 'Moderate') moderate++;\n  else if (tier === 'Weak') weak++;\n});\n\nconst total = allItems.length;\nconst category = allItems[0]?.json?.category || 'Unknown';\nconst location = allItems[0]?.json?.location || 'Unknown';\n\nreturn [{\n  json: {\n    summary_category: category,\n    summary_location: location,\n    total_businesses: total,\n    strong_count: strong,\n    moderate_count: moderate,\n    weak_count: weak,\n    lead_rate: total > 0 ? Math.round((weak / total) * 100) : 0,\n    completed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0020-0020-0020-000000000020",
+      "name": "Build Summary Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2380, 620]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=✅ *AUDIT COMPLETE!*\n\n📍 *{{ $json.summary_location }}* — {{ $json.summary_category }}\n\n📊 *Results Summary:*\n🟢 Strong presence: {{ $json.strong_count }} businesses\n🟡 Moderate presence: {{ $json.moderate_count }} businesses\n🔴 Weak presence (leads): {{ $json.weak_count }} businesses\n\n🎯 *Lead Rate: {{ $json.lead_rate }}%* of businesses need help!\n📋 Full data saved to Google Sheets\n\n_Completed: {{ $json.completed_at }}_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "a1b2c3d4-0021-0021-0021-000000000021",
+      "name": "Telegram — Final Summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2580, 620],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [{ "node": "Set Search Inputs", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Search Inputs": {
+      "main": [
+        [{ "node": "Split Categories", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Categories": {
+      "main": [
+        [{ "node": "Build Search Query", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Search Query": {
+      "main": [
+        [{ "node": "Brave Search API", "type": "main", "index": 0 }]
+      ]
+    },
+    "Brave Search API": {
+      "main": [
+        [{ "node": "Parse Business Results", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Business Results": {
+      "main": [
+        [{ "node": "Process in Batches", "type": "main", "index": 0 }]
+      ]
+    },
+    "Process in Batches": {
+      "main": [
+        [
+          { "node": "Check Website Live", "type": "main", "index": 0 },
+          { "node": "Groq AI Audit", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check Website Live": {
+      "main": [
+        [{ "node": "Evaluate Website Status", "type": "main", "index": 0 }]
+      ]
+    },
+    "Evaluate Website Status": {
+      "main": [
+        [{ "node": "Merge Website + AI Data", "type": "main", "index": 0 }]
+      ]
+    },
+    "Groq AI Audit": {
+      "main": [
+        [{ "node": "Parse AI Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [{ "node": "Merge Website + AI Data", "type": "main", "index": 1 }]
+      ]
+    },
+    "Merge Website + AI Data": {
+      "main": [
+        [{ "node": "Compute Final Score", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compute Final Score": {
+      "main": [
+        [{ "node": "Save to Google Sheets", "type": "main", "index": 0 }]
+      ]
+    },
+    "Save to Google Sheets": {
+      "main": [
+        [
+          { "node": "Is Weak Tier?", "type": "main", "index": 0 },
+          { "node": "Build Summary Report", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Is Weak Tier?": {
+      "main": [
+        [{ "node": "Generate Outreach Message", "type": "main", "index": 0 }],
+        [{ "node": "Rate Limit Pause", "type": "main", "index": 0 }]
+      ]
+    },
+    "Generate Outreach Message": {
+      "main": [
+        [{ "node": "Extract Outreach Text", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Outreach Text": {
+      "main": [
+        [{ "node": "Telegram — Weak Lead Alert", "type": "main", "index": 0 }]
+      ]
+    },
+    "Rate Limit Pause": {
+      "main": [
+        [{ "node": "Process in Batches", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Summary Report": {
+      "main": [
+        [{ "node": "Telegram — Final Summary", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    { "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z", "id": "tag-001", "name": "business-discovery" },
+    { "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z", "id": "tag-002", "name": "kigali" },
+    { "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z", "id": "tag-003", "name": "free-stack" }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-01T00:00:00.000Z",
+  "versionId": "v1.0.0"
+}
